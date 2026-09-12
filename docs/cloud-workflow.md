@@ -10,7 +10,7 @@ GitHub의 특정 브랜치에 **커밋하고 push한** 코드·문서·테스트
 
 ## 이 브랜치를 처음 게시할 때
 
-2026-09-12 정리 브랜치는 `codex/work-handoff`이며 아직 미커밋이다. 아래는 검토 후 실행할 절차이고, 이 문서를 만들면서 실행한 명령이 아니다.
+최초 정리 브랜치는 `codex/work-handoff`이다. 2026-09-12 사용자 승인으로 커밋/push 후 [PR #1](https://github.com/JunhoKim01/PlacePlane/pull/1)을 생성했다. 아래는 최초 게시 절차의 기록이며, PR이 이미 merge되었다면 반복하지 말고 최신 main에서 다음 작업을 시작한다.
 
 1. `git status --short --branch`, `git diff`, `git ls-files --others --exclude-standard`로 이번 문서/CI와 기존 URL 기능 변경을 함께 확인한다.
 2. `npm ci`, `npm test`, `npm run build`, `git diff --check`를 실행한다. 명령별 실패를 확인하며 실패했는데 다음 결과만 보고 성공으로 판단하지 않는다.
