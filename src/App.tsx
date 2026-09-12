@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, RotateCw, Trash2, Upload, Move, Info, Copy, Download, Share2, X, Crosshair, Camera, Save } from 'lucide-react';
+import { prepareFloorPlan } from './floorPlanImage';
+import FloorPlanUrlDialog from './FloorPlanUrlDialog';
 
 type Unit = 'cm' | 'mm';
 type FurnitureItem = { id: string; name: string; w: number; h: number; x: number; y: number; rotation: number; color: string };
@@ -34,6 +36,12 @@ export default function App() {
   const [calibInput, setCalibInput] = useState('');
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageRequestRef = useRef(0);
+  const [isImportingImage, setIsImportingImage] = useState(false);
+  const [isUrlDialogOpen, setIsUrlDialogOpen] = useState(false);
+
+  useEffect(() => () => { if (bgImage) URL.revokeObjectURL(bgImage); }, [bgImage]);
+  useEffect(() => () => { imageRequestRef.current += 1; }, []);
 
   // 로컬 스토리지 데이터 로드 (마운트 시 현재 세션 및 프리셋 모두 로드)
   useEffect(() => {
@@ -150,14 +158,42 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedItem, isCalibrating]);
 
+  const importFloorPlan = async (blob: Blob) => {
+    const request = ++imageRequestRef.current;
+    setIsImportingImage(true);
+    try {
+      const imageUrl = await prepareFloorPlan(blob);
+      if (request !== imageRequestRef.current) {
+        URL.revokeObjectURL(imageUrl);
+        return;
+      }
+      setBgImage(imageUrl);
+      setDraggingItem(null);
+      setCaptureDataUrl(null);
+      setIsCaptureModalOpen(false);
+      cancelCalibration();
+      showSystemMessage('success', '도면을 적용했습니다. [정밀 캘리브레이션]으로 실제 길이를 맞춰주세요.');
+    } catch (error) {
+      if (request === imageRequestRef.current) {
+        showSystemMessage('error', error instanceof Error ? error.message : '도면을 가져오지 못했습니다.');
+      }
+    } finally {
+      if (request === imageRequestRef.current) setIsImportingImage(false);
+    }
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    if (bgImage) URL.revokeObjectURL(bgImage);
-    const imageUrl = URL.createObjectURL(file);
-    setBgImage(imageUrl);
-    // 새 도면 업로드 시 스케일 오차 방지를 위해 캘리브레이션 유도 알림
-    showSystemMessage('success', '도면이 업로드되었습니다. 좌측의 [정밀 캘리브레이션]을 실행해 비율을 맞추세요.');
+    void importFloorPlan(file);
+  };
+
+  const handleImagePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const image = Array.from(event.clipboardData.items).find(item => item.type.startsWith('image/'))?.getAsFile();
+    if (!image) return;
+    event.preventDefault();
+    void importFloorPlan(image);
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -193,7 +229,8 @@ export default function App() {
   };
 
   const resetAllData = () => {
-    if (bgImage) URL.revokeObjectURL(bgImage);
+    imageRequestRef.current += 1;
+    setIsImportingImage(false);
     setBgImage(null);
     setItems([]);
     setRealWidthMm(12000);
@@ -414,7 +451,9 @@ export default function App() {
   const scaleMultiplier = containerWidth > 0 ? containerWidth / realWidthMm : 0;
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-100 font-sans relative overflow-hidden">
+    <div onPaste={handleImagePaste} className="flex flex-col h-screen bg-neutral-100 font-sans relative overflow-hidden">
+      {isUrlDialogOpen && <FloorPlanUrlDialog onClose={() => setIsUrlDialogOpen(false)} onApply={importFloorPlan} />}
+      {isImportingImage && <div role="status" className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[9999] bg-neutral-800 text-white rounded-lg px-4 py-2 text-sm">도면을 가져오는 중...</div>}
       {/* Toast 시스템 알림 */}
       {systemMessage && (
         <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-[9999] px-4 py-2 rounded shadow-lg text-sm font-medium transition-all ${systemMessage.type === 'error' ? 'bg-red-600 text-white' : 'bg-neutral-800 text-white'}`}>
@@ -616,6 +655,7 @@ export default function App() {
           {/* 1. 컴팩트 설정 영역 */}
           <div className="mb-5 bg-neutral-50 rounded-lg border border-neutral-200 p-3 flex-shrink-0 space-y-3">
             <h2 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">도면 기본 설정</h2>
+            {import.meta.env.DEV && <button onClick={() => setIsUrlDialogOpen(true)} className="w-full rounded-md bg-blue-600 text-white py-2 text-xs font-semibold hover:bg-blue-700">네이버 도면 URL로 가져오기</button>}
             <div className="flex space-x-2">
               <div className="flex bg-neutral-200/50 p-0.5 rounded-md flex-1">
                 <button onClick={() => setUnit('cm')} className={`flex-1 py-1 text-xs font-medium rounded transition-colors ${unit === 'cm' ? 'bg-white shadow-sm text-neutral-800' : 'text-neutral-500 hover:text-neutral-700'}`}>cm</button>
@@ -695,7 +735,7 @@ export default function App() {
             <div className="text-center text-neutral-400 flex flex-col items-center">
               <Move className="w-16 h-16 mb-4 text-neutral-300" />
               <p className="text-lg font-medium">좌측 패널에서 도면 이미지를 업로드해주세요.</p>
-              <p className="text-sm mt-2">PNG, JPG 등 도면 이미지 파일을 선택하세요.</p>
+              <p className="text-sm mt-2">이미지를 복사해 Ctrl+V로 붙여넣거나 PNG, JPG 파일을 선택하세요.</p>
             </div>
           ) : (
             <div 

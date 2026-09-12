@@ -6,3 +6,17 @@ dist/
 !.env.example
 *.tsbuildinfo
 .DS_Store
+
+# Local credentials and diagnostic artifacts
+.npmrc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.har
+*.log
+/artifacts/
+/coverage/
+/test-results/
+/playwright-report/
